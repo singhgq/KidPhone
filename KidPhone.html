@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pretend Phone</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f2f2f2;
+    }
+    .phone {
+      width: 320px;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      padding: 20px;
+      text-align: center;
+    }
+    .number-display {
+      font-size: 22px;
+      margin-bottom: 15px;
+      min-height: 30px;
+      letter-spacing: 2px;
+    }
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .key {
+      background: #ddd;
+      border-radius: 50%;
+      padding: 20px;
+      font-size: 20px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s;
+    }
+    .key:active {
+      background: #bbb;
+    }
+    .controls {
+      margin-top: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 14px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+    }
+    .recording {
+      background: red;
+      color: white;
+    }
+    .idle {
+      background: green;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div id="numberDisplay" class="number-display"></div>
+    <div class="keypad">
+      <div class="key">1</div>
+      <div class="key">2</div>
+      <div class="key">3</div>
+      <div class="key">4</div>
+      <div class="key">5</div>
+      <div class="key">6</div>
+      <div class="key">7</div>
+      <div class="key">8</div>
+      <div class="key">9</div>
+      <div class="key">*</div>
+      <div class="key">0</div>
+      <div class="key">#</div>
+    </div>
+    <div class="controls">
+      <button id="recordBtn" class="idle">Start Recording</button>
+      <button id="callBtn">Call</button>
+      <button id="clearBtn">Clear</button>
+    </div>
+  </div>
+
+  <audio id="beep" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
+  <audio id="ringtone" src="https://actions.google.com/sounds/v1/household/phone_ringing.ogg"></audio>
+
+  <script>
+    const numberDisplay = document.getElementById('numberDisplay');
+    const recordBtn = document.getElementById('recordBtn');
+    const callBtn = document.getElementById('callBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const beep = document.getElementById('beep');
+    const ringtone = document.getElementById('ringtone');
+
+    let currentNumber = "";
+    let recordingChunks = [];
+    let mediaRecorder;
+    let audioURL;
+    let isRecording = false;
+
+    // Format number like (123) 456-7890
+    function formatPhoneNumber(value) {
+      if (value.length <= 3) return value;
+      if (value.length <= 6) return `(${value.slice(0,3)}) ${value.slice(3)}`;
+      return `(${value.slice(0,3)}) ${value.slice(3,6)}-${value.slice(6,10)}`;
+    }
+
+    // Keypad click
+    document.querySelectorAll('.key').forEach(key => {
+      key.addEventListener('click', () => {
+        if (currentNumber.length < 10) {
+          currentNumber += key.textContent;
+          numberDisplay.textContent = formatPhoneNumber(currentNumber);
+          beep.currentTime = 0;
+          beep.play();
+        }
+      });
+    });
+
+    // Record/Stop toggle
+    recordBtn.addEventListener('click', async () => {
+      if (!isRecording) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        recordingChunks = [];
+        mediaRecorder.ondataavailable = e => recordingChunks.push(e.data);
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordingChunks, { type: 'audio/webm' });
+          audioURL = URL.createObjectURL(blob);
+        };
+        mediaRecorder.start();
+        recordBtn.textContent = "Stop Recording";
+        recordBtn.className = "recording";
+        isRecording = true;
+      } else {
+        mediaRecorder.stop();
+        recordBtn.textContent = "Start Recording";
+        recordBtn.className = "idle";
+        isRecording = false;
+      }
+    });
+
+    // Call button
+    callBtn.addEventListener('click', () => {
+      if (audioURL && currentNumber.length >= 7) {
+        let playCount = 0;
+        ringtone.currentTime = 0;
+        ringtone.play();
+        ringtone.onended = () => {
+          playCount++;
+          if (playCount < 2) {
+            ringtone.currentTime = 0;
+            ringtone.play();
+          } else {
+            const audio = new Audio(audioURL);
+            audio.play();
+          }
+        };
+      }
+    });
+
+    // Clear button
+    clearBtn.addEventListener('click', () => {
+      currentNumber = "";
+      numberDisplay.textContent = "";
+    });
+  </script>
+</body>
+</html>
