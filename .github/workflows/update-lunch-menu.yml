@@ -1,0 +1,75 @@
+name: Update Lunch Menu
+
+on:
+  schedule:
+    - cron: '0 17 * * 1-5'  # 12:00 PM Central Time, Monday-Friday
+  workflow_dispatch:
+
+jobs:
+  update_lunch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install pillow pytesseract requests
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr ffmpeg espeak
+      
+      - name: Generate lunch audio
+        run: |
+          python3 << 'EOF'
+          import requests
+          from PIL import Image
+          from io import BytesIO
+          import pytesseract
+          from datetime import datetime, timedelta
+          import subprocess
+          
+          tomorrow = datetime.now() + timedelta(days=1)
+          if tomorrow.weekday() == 5:
+              tomorrow += timedelta(days=2)
+          elif tomorrow.weekday() == 6:
+              tomorrow += timedelta(days=1)
+          
+          day_name = tomorrow.strftime("%A")
+          date_str = tomorrow.strftime("%B %d")
+          
+          # Download menu image
+          url = "https://clayton.austinschools.org/sites/clayton.austinschools.org/files/inline-images/26%20-%2004%20Apr%20menu.jpg"
+          response = requests.get(url)
+          img = Image.open(BytesIO(response.content))
+          
+          # Extract text
+          text = pytesseract.image_to_string(img)
+          menu_item = "pizza"
+          
+          lines = text.split('\n')
+          for i, line in enumerate(lines):
+              if day_name.lower() in line.lower() and i + 1 < len(lines):
+                  potential = lines[i + 1].strip()
+                  if potential and len(potential) > 2:
+                      menu_item = potential
+                      break
+          
+          speech = f"The lunch menu for tomorrow {day_name} {date_str} is: {menu_item}"
+          subprocess.run(['espeak', '-w', 'lunch.wav', speech])
+          subprocess.run(['ffmpeg', '-i', 'lunch.wav', '-c:a', 'aac', '-b:a', '128k', '-y', 'lunch.m4a'], capture_output=True)
+          EOF
+      
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add lunch.m4a
+          git diff --quiet --cached || git commit -m "Update lunch menu $(date +'%Y-%m-%d')"
+          git push
